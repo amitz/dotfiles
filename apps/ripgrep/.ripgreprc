@@ -1,0 +1,8 @@
+# Make all searches case-insensitive by default
+--ignore-case
+
+# Include hidden files
+--hidden
+
+# Follow symbolic links
+--follow

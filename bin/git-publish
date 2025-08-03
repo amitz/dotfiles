@@ -1,0 +1,22 @@
+#!/usr/bin/env ruby
+#
+# Usage: git publish <remote-branch-name>
+# Set remote tracking based on the branch name
+
+def get_current_branch
+  `git rev-parse --abbrev-ref HEAD`.chomp
+end
+
+def main
+  current_branch = get_current_branch
+  protected_branches = ['master', 'dev', 'develop', 'stable', 'master-hf', 'main']
+
+    if protected_branches.include?(current_branch)
+    $stderr.puts "Currently on protected branch, aborting."
+    exit 1
+  else
+    system("git push -u origin #{current_branch}")
+  end
+end
+
+main

@@ -1,0 +1,13 @@
+# Prompt Theme
+sindresorhus/pure
+
+# Core Zsh enhancements
+zsh-users/zsh-autosuggestions
+zsh-users/zsh-completions
+
+# Syntax-highlighting
+zsh-users/zsh-syntax-highlighting
+catppuccin/zsh-syntax-highlighting kind:clone
+
+# Work-related
+lukechilds/zsh-nvm

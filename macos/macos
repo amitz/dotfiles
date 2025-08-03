@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+
+# Inspired from https://mths.be/macos
+
+# Close any open System Preferences panes, to prevent them from overriding
+# settings we're about to change
+osascript -e 'tell application "System Preferences" to quit'
+
+###############################################################################
+# General UI/UX                                                               #
+###############################################################################
+
+# Disable transparency in the menu bar and elsewhere (Preferences > Accessibility > Display > Reduce transparency)
+defaults write com.apple.universalaccess reduceTransparency -bool true
+
+# Removes delay on toolbar title rollover animations
+defaults write NSGlobalDomain NSToolbarTitleViewRolloverDelay -float 0
+
+# Expand save panel by default
+defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode -bool true
+defaults write NSGlobalDomain NSNavPanelExpandedStateForSaveMode2 -bool true
+
+# Expand print panel by default
+defaults write NSGlobalDomain PMPrintingExpandedStateForPrint -bool true
+defaults write NSGlobalDomain PMPrintingExpandedStateForPrint2 -bool true
+
+# Automatically quit printer app once the print jobs complete
+defaults write com.apple.print.PrintingPrefs "Quit When Finished" -bool true
+
+# Controls whether apps restores it open windows and tabs when you quit and reopen it (System Preferences > Desktop and Dock > "Close windows when quitting an app")
+defaults write com.apple.systempreferences NSQuitAlwaysKeepsWindows -bool false
+
+###############################################################################
+# Screen                                                                      #
+###############################################################################
+
+# Save screenshots to the desktop. Create the folder manually if it doesn't exists.
+defaults write com.apple.screencapture location -string "${HOME}/Pictures/Screenshots"
+
+# Disable shadow in screenshots
+defaults write com.apple.screencapture disable-shadow -bool true
+
+###############################################################################
+# Screen                                                                      #
+###############################################################################
+
+# Disable sleeping, as it makes it hard to wake the machine on clamsheel
+pmset -a sleep 0
+
+###############################################################################
+# Finder                                                                      #
+###############################################################################
+
+# Finder: show all filename extensions (Finder > Preferences > Advanced > Show all filename extensions)
+defaults write NSGlobalDomain AppleShowAllExtensions -bool true
+
+# Finder: show status bar (Finder > View > Show Status Bar)
+defaults write com.apple.finder ShowStatusBar -bool true
+
+# Finder: show path bar (Finder > View > Show Path Bar)
+defaults write com.apple.finder ShowPathbar -bool true
+
+# Display full POSIX path as Finder window title ("/Users/amitz/Documents" instead of "Documents")
+defaults write com.apple.finder _FXShowPosixPathInTitle -bool true
+
+# Keep folders on top when sorting by name (Finder > View > Show View Options > Keep folders on top when sorting by name)
+defaults write com.apple.finder _FXSortFoldersFirst -bool true
+
+# Disable the warning when changing a file extension (Finder -> Preferences > Advanced)
+defaults write com.apple.finder FXEnableExtensionChangeWarning -bool false
+
+# Disable the warning before emptying the Trash (Finder -> Preferences > Advanced)
+defaults write com.apple.finder WarnOnEmptyTrash -bool false
+
+###############################################################################
+# Dock, Dashboard, and hot corners                                            #
+###############################################################################
+
+# Enable highlight hover effect for the grid view of a stack (Dock)
+defaults write com.apple.dock mouse-over-hilite-stack -bool true
+
+# Set the icon size of Dock items to 36 pixels
+defaults write com.apple.dock tilesize -int 50
+
+# Change minimize/maximize window effect (System Settings > Desktop & Dock > Minimize windows using → Select "Scale effect")
+defaults write com.apple.dock mineffect -string "scale"
+
+# Minimize windows into their application's icon (System Preferences > Dock & Menu Bar > Minimize windows into application icon)
+defaults write com.apple.dock minimize-to-application -bool true
+
+# Show indicator lights for open applications in the Dock ("System Preferences > Dock & Menu Bar > Show indicators for open applications)
+defaults write com.apple.dock show-process-indicators -bool true
+
+# Disables the bounce animation of Dock icons when you launch an app. Normally, icons bounce to indicate launching.
+defaults write com.apple.dock launchanim -bool false
+
+# Don't automatically rearrange Spaces based on most recent use (System Settings → Desktop & Dock → Mission Control → Automatically rearrange Spaces based on most recent use)
+defaults write com.apple.dock mru-spaces -bool false
+
+# Remove the auto-hiding Dock delay
+defaults write com.apple.dock autohide-delay -float 0
+
+# Remove the animation when hiding/showing the Dock
+defaults write com.apple.dock autohide-time-modifier -float 0
+
+# Automatically hide and show the Dock (Settings → Desktop & Dock → Automatically hide and show the Dock)
+defaults write com.apple.dock autohide -bool true
+
+# Make Dock icons of hidden applications (Ctrl + H) translucent
+defaults write com.apple.dock showhidden -bool true
+
+# Don't show recent applications in Dock (System Settings → Desktop & Dock → Show recent applications in Dock)
+defaults write com.apple.dock show-recents -bool false
+
+###############################################################################
+# Clean up                                                                    #
+###############################################################################
+
+for app in "Dock" \
+	"Finder" \
+	"SystemUIServer"; do
+	killall "${app}" &> /dev/null
+done
+
+echo "Done. Note that some of these changes require a logout/restart to take effect."

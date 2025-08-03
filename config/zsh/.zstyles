@@ -1,0 +1,25 @@
+# Catppuccin Prompt-Theme
+zstyle ':prompt:pure:prompt'       symbol '❯'
+zstyle ':prompt:pure:git:stash'    symbol '≡'
+
+zstyle ':prompt:pure:prompt:success' color '#cba6f7'
+zstyle ':prompt:pure:prompt:error'   color '#f38ba8'
+
+zstyle ':prompt:pure:path'           color '#89b4fa'
+
+zstyle ':prompt:pure:git:dirty'      color '#fab387'
+zstyle ':prompt:pure:git:arrow'      color '#89dceb'
+zstyle ':prompt:pure:git:stash'      color '#89dceb'
+zstyle ':prompt:pure:git:branch'     color '#9399b2'
+zstyle ':prompt:pure:git:action'     color '#45475a'
+
+zstyle ':prompt:pure:execution_time' color '#f9e2af'
+zstyle ':prompt:pure:virtualenv'     color '#45475a'
+zstyle ':prompt:pure:user'           color '#45475a'
+zstyle ':prompt:pure:host'           color '#45475a'
+
+# Solarized Prompt-Theme
+# zstyle :prompt:pure:path color green
+# zstyle :prompt:pure:git:branch color yellow
+# zstyle :prompt:pure:prompt:success color white
+# export PURE_PROMPT_SYMBOL='>' # Until https://github.com/sindresorhus/pure/issues/248 is solved

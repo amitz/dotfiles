@@ -1,0 +1,64 @@
+[
+    // ---- Panel Navigation ----
+    // Navigate between editor groups, the terminal, and sidebars using Ctrl + H/J/K/L.
+    {
+        "key": "ctrl+j",
+        "command": "workbench.action.navigateDown",
+        "when": "neovim.mode == 'normal'"
+    },
+    {
+        "key": "ctrl+h",
+        "command": "workbench.action.navigateLeft",
+        "when": "neovim.mode == 'normal' && !terminalFocus"
+    },
+    {
+        "key": "ctrl+k",
+        "command": "workbench.action.navigateUp",
+        "when": "neovim.mode == 'normal' || terminalFocus"
+    },
+    {
+        "key": "ctrl+l",
+        "command": "workbench.action.navigateRight",
+        "when": "neovim.mode == 'normal' || sideBarFocus && !terminalFocus"
+    },
+    {
+        "key": "ctrl+l",
+        "command": "",
+        "when": "terminalFocus"
+    },
+
+    // ---- Editor Management ----
+    // Split the editor pane vertically or horizontally.
+    {
+        "key": "ctrl+s \\",
+        "command": "workbench.action.splitEditorRight",
+        "when": "neovim.mode == 'normal' && !terminalFocus"
+    },
+    {
+        "key": "ctrl+s -",
+        "command": "workbench.action.splitEditorDown",
+        "when": "neovim.mode == 'normal' && !terminalFocus"
+    },
+    {
+        "key": "ctrl+p",
+        "command": "workbench.action.quickOpen"
+    },
+
+    // ---- View Sizing ----
+    // Increase or decrease the size of the current view (e.g., editor pane).
+    {
+        "key": "shift+right",
+        "command": "workbench.action.increaseViewSize",
+        "when": "neovim.mode == 'normal'"
+    },
+    {
+        "key": "shift+down",
+        "command": "workbench.action.increaseViewSize",
+        "when": "neovim.mode == 'normal'"
+    },
+    {
+        "key": "shift+left",
+        "command": "workbench.action.decreaseViewSize",
+        "when": "neovim.mode == 'normal'"
+    }
+]
