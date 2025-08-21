@@ -1,3 +1,4 @@
+-- nvim-lint is only used as Canform doesn't support npm-groovy-lint
 return {
   "mfussenegger/nvim-lint",
   config = function()
