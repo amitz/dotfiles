@@ -22,10 +22,8 @@ return {
       desc = "Navigate right to Tmux pane",
     },
   },
-  config = function()
-    local nvim_tmux_nav = require('nvim-tmux-navigation')
-    nvim_tmux_nav.setup {
-        disable_when_zoomed = true
-    }
-  end,
+  opts = {
+    disable_when_zoomed = true
+  }
 }
+

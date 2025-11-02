@@ -1,6 +1,5 @@
 -- Settings for Python
 vim.bo.expandtab = true
-vim.bo.textwidth = 88
 vim.bo.tabstop = 4
 
 -- Buffer-local keymaps for debugging

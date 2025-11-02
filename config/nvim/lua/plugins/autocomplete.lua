@@ -1,0 +1,42 @@
+return {
+  'saghen/blink.cmp',
+  event = 'VimEnter',
+  version = '1.*',
+  dependencies = {
+    'folke/lazydev.nvim',
+  },
+  --- @module 'blink.cmp'
+  --- @type blink.cmp.Config
+  opts = {
+    keymap = {
+      -- The 'default' (recommended) mappings similar to built-in completions
+      -- <c-y> to accept ([y]es) the completion.
+      -- <tab>/<s-tab>: move to right/left of your snippet expansion
+      -- <c-space>: Open menu or open docs if already open
+      -- <c-n>/<c-p> or <up>/<down>: Select next/previous item
+      -- <c-e>: Hide menu
+      -- <c-k>: Toggle signature help
+      preset = 'default',
+    },
+
+    completion = {
+      -- By default, you may press `<c-space>` to show the documentation.
+      -- Optionally, set `auto_show = true` to show the documentation after a delay.
+      documentation = { auto_show = false, auto_show_delay_ms = 500 },
+    },
+
+    sources = {
+      -- Blink can aggregate multiple sources: LSP, snippets, paths, and custom providers.
+      default = { 'lsp', 'path', 'snippets', 'lazydev' },
+      providers = {
+        lazydev = { module = 'lazydev.integrations.blink', score_offset = 100 },
+      },
+    },
+
+    -- Prefer the (slighty) slower lua implmentation over the rust
+    fuzzy = { implementation = 'lua' },
+
+    -- Shows a signature help window while you type arguments for a function
+    signature = { enabled = true },
+  },
+}

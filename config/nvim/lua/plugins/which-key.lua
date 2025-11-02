@@ -1,9 +1,12 @@
 return {
-  "folke/which-key.nvim",
-  event = "VeryLazy",
-  config = function()
-    require("which-key").setup({
-      delay = 1500,
-    })
-  end,
+  'folke/which-key.nvim',
+  event = 'VeryLazy',
+  opts = {
+    delay = 1000,
+    spec = {
+      { '<leader>s', group = '[S]earch' },
+      { '<leader>t', group = '[T]oggle' },
+      { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
+    },
+  }
 }
