@@ -1,0 +1,15 @@
+# ripgrep defaults, read via $RIPGREP_CONFIG_PATH (exported in config/zsh/.zshenv).
+
+# Case-insensitive, unless the pattern has an uppercase letter
+--smart-case
+
+# Include hidden files
+--hidden
+
+# Truncate very long lines (minified files, lock files) to a short preview
+--max-columns=200
+--max-columns-preview
+
+# Always skip these, even outside a git repo (--hidden would otherwise show .git/).
+--glob=!.git/
+--glob=!node_modules/

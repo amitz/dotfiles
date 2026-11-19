@@ -1,0 +1,8 @@
+# Work identity, included by ~/.config/git-local/config for work remotes.
+[user]
+	email = you@company.com
+	signingkey = ~/.ssh/id_ed25519_work
+[gpg]
+	format = ssh
+[commit]
+	gpgsign = true

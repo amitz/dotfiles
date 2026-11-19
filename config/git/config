@@ -1,0 +1,64 @@
+# Global git config (~/.config/git/config). Identity is not here: it lives in
+# the untracked ~/.config/git-local/ (included last); template in local.example/.
+
+[user]
+	useConfigOnly = true # no identity matched -> refuse to commit
+
+[core]
+	pager = delta # theme from $BAT_THEME (.zshenv)
+
+[init]
+	defaultBranch = main
+
+[pull]
+	rebase = false
+
+[push]
+	autoSetupRemote = true
+
+[fetch]
+	prune = true
+
+[branch]
+	sort = -committerdate # git branch: most recent first
+
+[rebase]
+	autoStash = true  # stash uncommitted changes around a rebase
+	updateRefs = true # stacked branches move with a rebase
+
+[rerere]
+	enabled = true # reuse recorded conflict resolutions
+
+[help]
+	autocorrect = prompt # typo -> "did you mean ...?"
+
+[diff]
+	algorithm = histogram
+	colorMoved = plain
+
+[merge]
+	conflictStyle = zdiff3
+
+[interactive]
+	diffFilter = delta --color-only
+
+[delta]
+	navigate = true
+
+[alias]
+	aa = add --all
+	amend = commit --amend --no-edit
+	uncommit = reset --soft HEAD^
+	dc = diff --cached
+	sl = log --oneline -20
+	sla = log --oneline --graph --all -20
+	copysha = !git rev-parse HEAD | tr -d '\\n' | pbcopy
+	conflicts = !nvim -c DiffviewOpen
+	# Delete local branches whose remote is gone (e.g. merged and deleted).
+	# -D so squash-merged branches go too, but it also drops any commits on them
+	# that were never pushed. Branches that never had a remote are kept.
+	gone = "!git fetch --prune && git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | awk '$2 == \"[gone]\" {print $1}' | while read -r b; do git branch -D \"$b\"; done"
+
+# Machine-local identity/signing. Skipped if missing; last so it wins.
+[include]
+	path = ~/.config/git-local/config

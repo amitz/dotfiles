@@ -1,0 +1,3 @@
+# Personal identity, included by ~/.config/git-local/config for GitHub remotes.
+[user]
+	email = you@example.com

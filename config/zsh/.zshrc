@@ -1,31 +1,30 @@
-# Lazy-load (autoload) Zsh function files from a directory.
-fpath=(${ZDOTDIR}/zfunctions $fpath)
-autoload -Uz ${ZDOTDIR}/.zfunctions/*(.:t)
+# Interactive shells only.
 
-# Setting zstyles
-[[ ! -f ${ZDOTDIR}/.zstyles ]] || source ${ZDOTDIR}/.zstyles
+# zsh silently fails to write history/compdump if these are missing.
+[[ -d $XDG_CACHE_HOME/zsh ]] || mkdir -p $XDG_CACHE_HOME/zsh
+[[ -d $XDG_STATE_HOME/zsh ]] || mkdir -p $XDG_STATE_HOME/zsh
 
-# Create an amazing Zsh config using antidote plugins.
-source "$(brew --prefix)/opt/antidote/share/antidote/antidote.zsh"
-antidote load
+# Set by `brew shellenv` in login shells; fallback for shells started without one.
+: ${HOMEBREW_PREFIX:=/opt/homebrew}
 
-# Source anything in .zshrc.d.
-for _rc in ${ZDOTDIR}/.zshrc.d/*.zsh; do
-  # Ignore tilde files.
-  if [[ $_rc:t != '~'* ]]; then
-    source "$_rc"
-  fi
+# Autoloaded functions, one file per function. Machine-local first so it wins.
+fpath=(
+  $XDG_CONFIG_HOME/zsh-local/functions(N)
+  $ZDOTDIR/functions(N)
+  $HOMEBREW_PREFIX/share/zsh/site-functions(N)
+  $fpath
+)
+# A bare `autoload -Uz` (no names) would list every function, so guard it.
+_fns=( $ZDOTDIR/functions/*(N.:t) $XDG_CONFIG_HOME/zsh-local/functions/*(N.:t) )
+(( $#_fns )) && autoload -Uz $_fns
+unset _fns
+
+# conf.d in numeric order, then machine-local. Rename to ~name.zsh to disable.
+for _rc in $ZDOTDIR/conf.d/*.zsh $XDG_CONFIG_HOME/zsh-local/conf.d/*.zsh(N); do
+  [[ $_rc:t != '~'* ]] && source "$_rc"
 done
 unset _rc
 
-# Set the default text editor, preferring nvim if available.
-export EDITOR=$(command -v nvim || command -v vim)
-
-# fzf
-[ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
-
-# Source work-specific configurations if they exist.
-[[ -f "${ZDOTDIR}/work/.zshrc" ]] && source "${ZDOTDIR}/work/.zshrc"
-
-# Starts Tmux
-ensure_tmux_is_running
+# Must be last (plugin README): it wraps every ZLE widget defined so far.
+# Styles: conf.d/99-syntax-highlighting.zsh.
+source "$HOMEBREW_PREFIX/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh"

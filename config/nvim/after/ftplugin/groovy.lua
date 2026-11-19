@@ -1,4 +1,4 @@
--- Settings for Groovy and Jenkinsfiles
+-- Groovy and Jenkinsfiles
 vim.bo.expandtab = true
 vim.bo.shiftwidth = 4
 vim.bo.tabstop = 4
