@@ -1,0 +1,18 @@
+# ~/.config/git-local/config: machine-local git config (not tracked; install.sh
+# copies this folder there). Included last by config/git/config, so it wins.
+# Identity is picked per repo from the remote URL. A repo matching no rule has
+# no email, and user.useConfigOnly makes git refuse to commit there.
+[user]
+	name = Your Name
+
+# Personal
+[includeIf "hasconfig:remote.*.url:git@github.com:*/**"]
+	path = personal
+[includeIf "hasconfig:remote.*.url:https://github.com/**"]
+	path = personal
+
+# Work
+[includeIf "hasconfig:remote.*.url:git@gitlab.example.com:*/**"]
+	path = work
+[includeIf "hasconfig:remote.*.url:https://gitlab.example.com/**"]
+	path = work

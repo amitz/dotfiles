@@ -1,0 +1,484 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# ///
+"""grove - multi-repo git worktree manager
+
+Creates the same branch across multiple repositories in one command,
+each checked out into its own worktree under a shared wrapper directory.
+"""
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+import termios
+import tomllib
+import tty
+from pathlib import Path
+
+VERSION = "1.1.0"
+
+
+# -- colour helpers ----------------------------------------------------------
+
+def _c(code: str, t: str, stream=sys.stdout) -> str:
+    return f"\033[{code}m{t}\033[0m" if stream.isatty() else t
+
+def green(t: str)  -> str: return _c("32", t)
+def yellow(t: str) -> str: return _c("33", t)
+def red(t: str)    -> str: return _c("31", t)
+def bold(t: str)   -> str: return _c("1", t)
+def dim(t: str)    -> str: return _c("2", t)
+
+def err(msg: str) -> None:
+    print(_c("31", msg, sys.stderr), file=sys.stderr)
+
+
+# -- config ------------------------------------------------------------------
+
+def config_path() -> Path:
+    if env := os.environ.get("GROVE_CONFIG"):
+        return Path(env).expanduser()
+    xdg = os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
+    return Path(xdg) / "grove" / "config.toml"
+
+
+def load_config() -> dict:
+    p = config_path()
+    if not p.exists():
+        err(f"No config found at {p}")
+        print("Run 'grove init' to create one.", file=sys.stderr)
+        sys.exit(1)
+    with open(p, "rb") as f:
+        return tomllib.load(f)
+
+
+def expand(p: str) -> Path:
+    return Path(os.path.expandvars(os.path.expanduser(p))).resolve()
+
+
+def resolve_dirs(cfg: dict) -> tuple[Path, Path]:
+    d = cfg.get("defaults", {})
+    return (
+        expand(d.get("repos_dir", "~/repositories")),
+        expand(d.get("worktrees_dir", "~/repositories/worktrees")),
+    )
+
+
+def resolve_profile(cfg: dict, name: str) -> dict:
+    profiles = cfg.get("profiles", {})
+    if name not in profiles:
+        err(f"Profile '{name}' not found.")
+        if profiles:
+            print(f"Available: {', '.join(profiles)}", file=sys.stderr)
+        sys.exit(2)
+    return profiles[name]
+
+
+def scaffolding_names(cfg: dict) -> set[str]:
+    """Basenames of every scaffolding file in every profile."""
+    return {
+        Path(f).name
+        for profile in cfg.get("profiles", {}).values()
+        for f in profile.get("scaffolding", [])
+    }
+
+
+def valid_dir_name(name: str) -> bool:
+    """A single, non-hidden path segment (rejects '', '.', '..', 'a/b')."""
+    return bool(name.strip()) and "/" not in name and not name.startswith(".")
+
+
+# -- git helpers -------------------------------------------------------------
+
+def git(p: Path | None, *args: str) -> subprocess.CompletedProcess[str]:
+    cmd = ["git", "-C", str(p), *args] if p else ["git", *args]
+    return subprocess.run(cmd, capture_output=True, text=True)
+
+
+def output(r: subprocess.CompletedProcess[str]) -> str:
+    return (r.stderr or r.stdout).strip()
+
+
+def is_git_repo(p: Path) -> bool:
+    return git(p, "rev-parse", "--git-dir").returncode == 0
+
+
+def default_branch(p: Path) -> str | None:
+    """Local origin/HEAD first, then ask the remote."""
+    r = git(p, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")
+    if r.returncode == 0:
+        return r.stdout.strip().removeprefix("origin/")
+    r = git(p, "ls-remote", "--symref", "origin", "HEAD")
+    for line in r.stdout.splitlines():
+        if line.startswith("ref: refs/heads/"):
+            return line.removeprefix("ref: refs/heads/").split("\t")[0]
+    return None
+
+
+def branch_exists(p: Path, branch: str) -> bool:
+    return git(p, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}").returncode == 0
+
+
+def current_branch(p: Path) -> str | None:
+    r = git(p, "symbolic-ref", "--short", "HEAD")
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def short_head(p: Path) -> str:
+    r = git(p, "rev-parse", "--short", "HEAD")
+    return r.stdout.strip() if r.returncode == 0 else "?"
+
+
+# -- grove <branch-name> -----------------------------------------------------
+
+def cmd_create(args: argparse.Namespace) -> int:
+    cfg = load_config()
+    profile = resolve_profile(cfg, args.profile)
+    repos_dir, worktrees_dir = resolve_dirs(cfg)
+    branch: str = args.branch_name
+    repos: list[str] = profile.get("repos", [])
+
+    if git(None, "check-ref-format", "--branch", branch).returncode != 0:
+        err(f"Invalid branch name: '{branch}'")
+        return 2
+    if not repos:
+        err(f"Profile '{args.profile}' has no repos defined.")
+        return 2
+    if args.dir is not None and not valid_dir_name(args.dir):
+        err(f"Invalid --dir value: '{args.dir}' (must be one directory name, no '/', no leading '.')")
+        return 2
+
+    wrapper_name = args.dir.strip() if args.dir else branch.replace("/", "-")
+    wrapper = worktrees_dir / wrapper_name
+    if wrapper.exists():
+        err(f"Worktree wrapper already exists: {wrapper}")
+        print(f"Remove it first:  grove remove {wrapper_name}", file=sys.stderr)
+        return 1
+
+    # Phase 1: validate everything; nothing is written to disk.
+    errors: list[str] = []
+    files: list[Path] = []
+    for f in profile.get("scaffolding", []):
+        fp = expand(f)
+        if not fp.is_file():
+            errors.append(f"Scaffolding file not found: {fp}")
+        elif fp.name in {x.name for x in files}:
+            errors.append(f"Duplicate scaffolding basename: '{fp.name}' ({fp})")
+        else:
+            files.append(fp)
+
+    note = f", {len(files)} scaffolding file(s)" if files else ""
+    print(f"\nProfile {bold(args.profile)}: {len(repos)} repo(s){note}\n")
+
+    ready: list[tuple[str, Path, str]] = []  # (repo, repo_path, default_branch)
+    for repo in repos:
+        repo_path = repos_dir / repo
+        print(f"  {repo:<26} ", end="", flush=True)
+        if not repo_path.is_dir() or not is_git_repo(repo_path):
+            print(red("not a git repo"))
+            errors.append(f"Not a git repository: {repo_path}")
+            continue
+        r = git(repo_path, "fetch", "--quiet", "origin")
+        if r.returncode != 0:
+            print(red("fetch failed"))
+            errors.append(f"Fetch failed for '{repo}': {output(r)}")
+            continue
+        db = default_branch(repo_path)
+        if db is None:
+            print(red("no default branch"))
+            errors.append(f"Cannot detect default branch for '{repo}'. Try: git remote set-head origin --auto")
+            continue
+        if branch_exists(repo_path, branch):
+            print(red("branch exists"))
+            errors.append(f"Branch '{branch}' already exists in '{repo}': git -C {repo_path} branch -D {branch}")
+            continue
+        print(green("ok") + dim(f"  (from origin/{db})"))
+        ready.append((repo, repo_path, db))
+
+    if errors:
+        err("\nValidation failed, nothing was created:")
+        for e in errors:
+            print(f"  x {e}", file=sys.stderr)
+        return 1
+
+    # Phase 2: create. Any failure rolls back what was created so far.
+    wrapper.mkdir(parents=True)
+    for fp in files:
+        shutil.copy2(fp, wrapper / fp.name)
+
+    print(f"\nCreating worktrees (branch: {branch}):\n")
+    created: list[tuple[Path, Path]] = []
+    for repo, repo_path, db in ready:
+        target = wrapper / repo
+        print(f"  {repo:<26} ", end="", flush=True)
+        # --no-track: the new branch must not track origin/<default>, or
+        # `git push` refuses (name mismatch) and push.autoSetupRemote never applies.
+        r = git(repo_path, "worktree", "add", "--no-track", "-b", branch, str(target), f"origin/{db}")
+        if r.returncode != 0:
+            print(red(f"failed: {output(r)}"))
+            err("Rolling back...")
+            for rp, rt in reversed(created):
+                git(rp, "worktree", "remove", "--force", str(rt))
+                git(rp, "branch", "-D", branch)
+            shutil.rmtree(wrapper, ignore_errors=True)
+            err("Rollback complete. No changes were made.")
+            return 1
+        created.append((repo_path, target))
+        print(green("ok") + dim(f"  ({db} @ {short_head(target)})"))
+
+    print(f"\n{green(bold('Done!'))} Worktrees ready under {bold(str(wrapper))}")
+    return 0
+
+
+# -- grove list --------------------------------------------------------------
+
+def cmd_list() -> int:
+    cfg = load_config()
+    repos_dir, worktrees_dir = resolve_dirs(cfg)
+
+    print(f"\n{bold('Config:')}        {config_path()}")
+    print(f"{bold('Repos dir:')}     {repos_dir}")
+    print(f"{bold('Worktrees dir:')} {worktrees_dir}")
+
+    print(f"\n{bold('Profiles:')}")
+    for name, profile in cfg.get("profiles", {}).items() or [("(none defined)", {})]:
+        repos, files = profile.get("repos", []), profile.get("scaffolding", [])
+        print(f"  {bold(name)}{green('  [default]') if name == 'default' else ''}")
+        if profile:
+            print(f"    repos: {', '.join(repos) or dim('(none)')}")
+        if files:
+            print(f"    scaffolding: {', '.join(files)}")
+
+    print(f"\n{bold('Existing worktrees:')}")
+    wrappers = sorted(e for e in worktrees_dir.iterdir() if e.is_dir()) if worktrees_dir.is_dir() else []
+    if not wrappers:
+        print(f"  {dim('(none)')}")
+    for wrapper in wrappers:
+        entries = sorted(wrapper.iterdir(), key=lambda e: (e.is_file(), e.name))  # dirs first
+        repos = [e for e in entries if e.is_dir() and is_git_repo(e)]
+        # The dir name may differ from the branch (--dir, or '/' replaced by '-').
+        branch = next((b for b in map(current_branch, repos) if b), None)
+        suffix = f"  {dim('(' + branch + ')')}" if branch and branch != wrapper.name else ""
+        print(f"\n  {bold(wrapper.name)}/{suffix}")
+        for e in entries:
+            if e in repos:
+                print(f"    {e.name:<26}  {dim(short_head(e))}  {dim(current_branch(e) or 'detached')}")
+            elif e.is_dir():
+                print(f"    {e.name:<26}  {dim('(not a git repo)')}")
+            else:
+                print(f"    {dim(e.name + '  (file)')}")
+    return 0
+
+
+# -- grove remove ------------------------------------------------------------
+
+def _read_key() -> str:
+    """Read a single keypress without requiring Enter."""
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        return sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
+
+
+def _pick_branches(candidates: list[tuple[str, Path, str]]) -> list[tuple[str, Path, str]]:
+    """Single-keypress checklist: which branches to delete. Default: keep all."""
+    if not sys.stdin.isatty():
+        return []
+
+    selected = [False] * len(candidates)
+    drawn = 0
+
+    def render() -> None:
+        nonlocal drawn
+        if drawn:
+            sys.stdout.write(f"\033[{drawn}A\033[J")  # back up and clear the old menu
+        lines = [
+            bold("Delete branches in these repos?"),
+            dim("  digit = toggle  |  a = all  |  Enter/d = confirm  |  n/q = keep all"),
+            "",
+            *(f"  {green('[x]') if s else dim('[ ]')}  {i}  {repo:<26} {dim(br)}"
+              for i, (s, (repo, _, br)) in enumerate(zip(selected, candidates), 1)),
+            "",
+        ]
+        sys.stdout.write("\n".join(lines) + "\n")
+        sys.stdout.flush()
+        drawn = len(lines)
+
+    print()
+    render()
+    while True:
+        ch = _read_key()
+        if ch in ("\x03", "\x04", "q", "Q", "n", "N"):
+            return []
+        if ch in ("\r", "\n", "d", "D"):
+            return [c for c, s in zip(candidates, selected) if s]
+        if ch in ("a", "A"):
+            selected[:] = [not all(selected)] * len(selected)
+        elif ch.isdigit() and 0 < int(ch) <= len(candidates):
+            selected[int(ch) - 1] ^= True
+        else:
+            continue
+        render()
+
+
+def cmd_remove(args: argparse.Namespace) -> int:
+    if not valid_dir_name(args.dir_name):
+        err(f"Invalid directory name: '{args.dir_name}' (use a name from 'grove list')")
+        return 2
+
+    cfg = load_config()
+    repos_dir, worktrees_dir = resolve_dirs(cfg)
+    wrapper = worktrees_dir / args.dir_name
+    if not wrapper.is_dir():
+        err(f"No worktree wrapper found: {wrapper}")
+        return 1
+
+    # Only files grove copied in are deleted; anything else is left in place.
+    scaffolding = scaffolding_names(cfg)
+    print(f"Removing worktrees for {bold(args.dir_name)}:\n")
+    removed = failed = 0
+    candidates: list[tuple[str, Path, str]] = []
+
+    for entry in sorted(wrapper.iterdir()):
+        if entry.is_file():
+            if entry.name in scaffolding:
+                entry.unlink()
+                print(f"  + deleted scaffolding  {entry.name}")
+            else:
+                print(yellow(f"  ! kept '{entry.name}': not a scaffolding file"))
+            continue
+        if not entry.is_dir():
+            continue
+
+        source = repos_dir / entry.name
+        if not source.is_dir() or not is_git_repo(source):
+            print(yellow(f"  ! skipped '{entry.name}': source repo not found in {repos_dir}"))
+            failed += 1
+            continue
+
+        branch = current_branch(entry)  # read before the worktree is gone
+        # No --force: git refuses if the worktree has uncommitted changes.
+        r = git(source, "worktree", "remove", str(entry))
+        if r.returncode != 0:
+            print(red(f"  x skipped '{entry.name}': {output(r)}"))
+            failed += 1
+            continue
+        print(green(f"  + removed  {entry.name}"))
+        removed += 1
+        if branch and branch_exists(source, branch):
+            candidates.append((entry.name, source, branch))
+
+    try:
+        wrapper.rmdir()
+        print(f"\n+ Removed wrapper: {wrapper}")
+    except OSError:
+        print(yellow(f"\n! Wrapper not empty, leaving: {wrapper}"))
+
+    print(f"\n{removed} worktree(s) removed" + (yellow(f", {failed} skipped") if failed else "") + ".")
+
+    if candidates:
+        to_delete = _pick_branches(candidates)
+        for repo, source, br in to_delete:
+            r = git(source, "branch", "-D", br)
+            if r.returncode == 0:
+                print(green(f"  + deleted branch  {repo}  ({br})"))
+            else:
+                print(red(f"  x failed to delete branch in {repo}: {output(r)}"))
+        if not to_delete:
+            print(dim("  Branches kept. Delete later with: git -C <repo> branch -D <branch>"))
+
+    return 1 if failed else 0
+
+
+# -- grove init --------------------------------------------------------------
+
+SAMPLE_CONFIG = """# grove config. Location: $GROVE_CONFIG, else $XDG_CONFIG_HOME/grove/config.toml
+
+[defaults]
+repos_dir     = "~/repositories"            # where your clones live
+worktrees_dir = "~/repositories/worktrees"  # where grove creates <dir>/<repo>/
+
+# Used when no -p is given.
+[profiles.default]
+repos = []        # directory names under repos_dir, e.g. ["my-app", "my-app-infra"]
+scaffolding = []  # files copied into each new <dir>/, e.g. ["~/notes/AGENTS.md"]
+
+# [profiles.backend-only]
+# repos = ["my-app"]
+"""
+
+
+def cmd_init() -> int:
+    target = config_path()
+    if target.exists():
+        print(f"Config already exists: {bold(str(target))}")
+        return 0
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(SAMPLE_CONFIG)
+    print(f"+ Config created: {bold(str(target))}")
+    print("Next: set 'repos' in [profiles.default], then run 'grove <branch-name>'.")
+    return 0
+
+
+# -- CLI ---------------------------------------------------------------------
+
+EPILOG = """
+commands:
+  grove <branch-name> [-p PROFILE] [-d DIR]  Create branch + worktrees in every repo of a profile
+  grove list                                 Show config, profiles and existing worktrees
+  grove remove <dir-name>                    Remove worktrees (skips dirty ones), then
+                                             optionally delete the branches
+  grove init                                 Write a sample config
+
+examples:
+  grove fix-login-bug
+  grove BCE-0000/fix-login-bug --dir fix-login-bug
+  grove fix-login-bug -p backend-only
+  grove remove fix-login-bug
+
+config: ~/.config/grove/config.toml (override with GROVE_CONFIG=/path/to/config.toml)
+"""
+
+
+def main() -> int:
+    raw = sys.argv[1:]
+
+    # Anything that isn't a subcommand or a top-level flag is a branch name.
+    if raw and raw[0] not in {"list", "remove", "init", "-h", "--help", "--version"}:
+        p = argparse.ArgumentParser(prog="grove")
+        p.add_argument("branch_name", metavar="<branch-name>")
+        p.add_argument("-p", "--profile", default="default", help="profile to use (default: 'default')")
+        p.add_argument("-d", "--dir", help="worktree directory name (default: branch with '/' -> '-')")
+        return cmd_create(p.parse_args(raw))
+
+    p = argparse.ArgumentParser(
+        prog="grove",
+        description="Multi-repo git worktree manager.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=EPILOG,
+    )
+    p.add_argument("--version", action="version", version=f"grove {VERSION}")
+    sub = p.add_subparsers(dest="command")
+    sub.add_parser("list", help="show profiles and existing worktrees")
+    sub.add_parser("init", help="write a sample config")
+    sub.add_parser("remove", help="remove worktrees by directory name").add_argument("dir_name", metavar="<dir-name>")
+    args = p.parse_args(raw)
+
+    if args.command == "list":
+        return cmd_list()
+    if args.command == "remove":
+        return cmd_remove(args)
+    if args.command == "init":
+        return cmd_init()
+    p.print_help()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

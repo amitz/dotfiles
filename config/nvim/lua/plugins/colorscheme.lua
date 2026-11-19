@@ -1,23 +1,7 @@
-return {
-  {
-    'catppuccin/nvim',
-    name = 'catppuccin',
-    priority = 1000,
-    opts = {
-      flavour = 'mocha',
-      integrations = {
-        fidget = true,
-        mini = {
-          enabled = true,
-          indentscope_color = '',
-        },
-      },
-    },
-    config = function(_, opts)
-      require('catppuccin').setup(opts)
+-- Catppuccin Mocha, matching Ghostty, tmux, fzf and the zsh prompt.
+-- https://github.com/catppuccin/nvim
+-- Plugin integrations are detected automatically (auto_integrations).
+vim.pack.add { { src = 'https://github.com/catppuccin/nvim', name = 'catppuccin' } }
 
-      -- Set the colorscheme
-      vim.cmd.colorscheme 'catppuccin'
-    end,
-  },
-}
+require('catppuccin').setup { flavour = 'mocha' }
+vim.cmd.colorscheme 'catppuccin'

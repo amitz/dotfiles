@@ -1,9 +1,4 @@
--- Settings for Python
-vim.bo.expandtab = true
-vim.bo.tabstop = 4
+-- Python (indent: nvim's default is already 4 spaces)
 
--- Buffer-local keymaps for debugging
-local opts = { buffer = true, desc = "Python debugging" }
-vim.keymap.set("n", "<leader>ip", "ofrom IPython import embed; embed()<esc>", opts)
-vim.keymap.set("n", "<leader>pdb", "oimport ipdb; ipdb.set_trace(context=5)<esc>", opts)
-vim.keymap.set("n", "<leader>slp", "oimport time; time.sleep(1)<esc>", opts)
+-- Debugging helper (use the built-in breakpoint() to stop in the debugger)
+vim.keymap.set('n', '<leader>slp', 'oimport time; time.sleep(1)<Esc>', { buffer = true, desc = 'Insert sleep(1)' })

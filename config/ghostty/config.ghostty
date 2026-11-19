@@ -1,0 +1,15 @@
+# Font: Ghostty's built-in JetBrains Mono (with Nerd Font symbols).
+font-size = 21
+font-thicken = true
+
+# Pinned to Mocha: fzf, tmux, the prompt and syntax highlighting use fixed Mocha colors.
+theme = Catppuccin Mocha
+
+# Left Option = Alt (fzf Alt-c) on any input language; Right Option still types symbols.
+macos-option-as-alt = left
+
+# No tab-title bell or Dock bounce (system sound is already off by default).
+bell-features = no-title,no-attention
+
+# tmux through a login shell, so the tmux server gets .zprofile's PATH.
+command = /bin/zsh -lc 'exec tmux new-session -A -s main'
